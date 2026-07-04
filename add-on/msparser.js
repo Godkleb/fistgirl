@@ -137,6 +137,46 @@ var msParser = (function()
                                 if (m) { directLink = m[1]; }
                             }
 
+                            // Pattern 4: HTMX POST request (Asynchronous)
+                            if (!directLink) {
+                                console.log("FDM msParser: Patterns 1-3 failed. Attempting Pattern 4 (HTMX POST)...");
+                                var idMatch = fuckingFastUrl.match(/fuckingfast\.co\/([a-zA-Z0-9]+)/);
+                                
+                                if (idMatch && idMatch[1]) {
+                                    var fileId = idMatch[1];
+                                    var postUrl = "https://fuckingfast.co/" + fileId + "/go";
+                                    
+                                    fetch(postUrl, {
+                                        method: 'POST',
+                                        headers: {
+                                            'HX-Request': 'true',
+                                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                                        },
+                                        redirect: 'manual'
+                                    })
+                                    .then(function(res) {
+                                        var finalLink = res.headers.get('Location') || res.headers.get('HX-Redirect');
+                                        if (!finalLink && res.url && res.url.includes('/dl/')) {
+                                            finalLink = res.url;
+                                        }
+                                        
+                                        if (finalLink) {
+                                            console.log("FDM msParser: Pattern 4 succeeded! Found link: " + finalLink);
+                                            resolve(finalLink); // Resolves the whole extension successfully
+                                        } else {
+                                            reject("All 4 patterns failed to find the direct download link.");
+                                        }
+                                    })
+                                    .catch(function(err) {
+                                        reject("Pattern 4 POST failed: " + err);
+                                    });
+                                    
+                                    // CRITICAL: Stop executing downward so we don't accidentally trigger the "else" reject below while waiting for the network!
+                                    return; 
+                                }
+                            }
+
+                            // Final check if Patterns 1, 2, or 3 found the link instantly
                             if (directLink) {
                                 console.log("FDM msParser: Found direct download link: " + directLink);
                                 resolve(directLink);
