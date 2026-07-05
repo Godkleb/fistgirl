@@ -100,98 +100,91 @@ var msParser = (function()
         },
 
         // Helper methods
-        extractFuckingFastDirectLink: function (fuckingFastUrl) {
-            console.log("FDM msParser: extractFuckingFastDirectLink called with: " + fuckingFastUrl);
-
-            var cookiesStr = this._cookiesStr || "";
+        extractFuckingFastDirectLink: function (fuckingFastUrl, cookiesStr) {
+            console.log("FDM Plugin: extractFuckingFastDirectLink called with: " + fuckingFastUrl);
 
             return new Promise(function (resolve, reject) {
-                downloadUrlAsUtf8Text(fuckingFastUrl, cookiesStr, [
-                    { key: "User-Agent", value: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" }
-                ], "")
-                    .then(function (response) {
-                        console.log("FDM msParser: Received response from fuckingfast.co");
+                var getHeaders = [
+                    { key: "User-Agent", value: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" },
+                    { key: "Accept", value: "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8" }
+                ];
 
-                        if (!response || !response.body) {
-                            reject("Empty response from fuckingfast.co");
+                var safeCookies = cookiesStr || "";
+
+                // Enhanced Fallback Using Exact Qt/QML Bridge Syntax
+                function executePattern4WithPython() {
+                    console.log("FDM msParser: Executing Pattern 4 via Native Python Bridge...");
+                    
+                    if (typeof launchPythonScript !== "function") {
+                        reject("Pattern 4 failed: launchPythonScript engine method is not available in this FDM sandbox version.");
+                        return;
+                    }
+
+                    // FIX: launchPythonScript expects: (requestId, interactive, scriptPath, args)
+                    launchPythonScript(0, true, "extractor.py", [fuckingFastUrl, safeCookies])
+                        .then(function(result) {
+                            console.log("FDM msParser: Python process completed execution.");
+                            
+                            // FIX: FDM resolves process streams to the .output property
+                            var output = (result && result.output) ? result.output.trim() : "";
+                            
+                            if (output.indexOf("SUCCESS:") === 0) {
+                                var directLink = output.substring(8);
+                                console.log("FDM msParser: Python successfully bypassed Cloudflare! Link: " + directLink);
+                                resolve(directLink);
+                            } else if (output.indexOf("ERROR:") === 0) {
+                                reject("Python script execution error: " + output.substring(6));
+                            } else {
+                                reject("Pattern 4 failed: Unexpected console footprint returned from script: " + output);
+                            }
+                        })
+                        .catch(function(err) {
+                            var errorDetails = typeof err === 'object' ? JSON.stringify(err) : err;
+                            reject("Pattern 4 Python runtime failure: " + errorDetails);
+                        });
+                }
+
+                // Step 1: Standard HTML parsing pass-through
+                downloadUrlAsUtf8Text(fuckingFastUrl, safeCookies, getHeaders, "")
+                    .then(function (response) {
+                        console.log("FDM Plugin: Received HTML response from fuckingfast.co");
+                        if (!response) {
+                            executePattern4WithPython();
                             return;
                         }
 
                         try {
-                            var body = response.body;
+                            var body = response.body || response.text || (typeof response === 'string' ? response : "");
                             var directLink = null;
 
-                            // Pattern 1: window.open("https://.../dl/...")
                             var m = body.match(/window\.open\(\s*["'](https?:\/\/(?:dl\.)?fuckingfast\.co\/dl\/[^"']+)["']/);
                             if (m) { directLink = m[1]; }
 
-                            // Pattern 2: href="https://.../dl/..."
                             if (!directLink) {
                                 m = body.match(/href=["'](https?:\/\/(?:dl\.)?fuckingfast\.co\/dl\/[^"']+)["']/);
                                 if (m) { directLink = m[1]; }
                             }
 
-                            // Pattern 3: any host direct /dl/ URL in script tags
                             if (!directLink) {
                                 m = body.match(/(https?:\/\/(?:dl\.)?fuckingfast\.co\/dl\/[^\s"'<>]+)/);
                                 if (m) { directLink = m[1]; }
                             }
 
-                            // Pattern 4: HTMX POST request (Asynchronous)
-                            if (!directLink) {
-                                console.log("FDM msParser: Patterns 1-3 failed. Attempting Pattern 4 (HTMX POST)...");
-                                var idMatch = fuckingFastUrl.match(/fuckingfast\.co\/([a-zA-Z0-9]+)/);
-                                
-                                if (idMatch && idMatch[1]) {
-                                    var fileId = idMatch[1];
-                                    var postUrl = "https://fuckingfast.co/" + fileId + "/go";
-                                    
-                                    fetch(postUrl, {
-                                        method: 'POST',
-                                        headers: {
-                                            'HX-Request': 'true',
-                                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-                                        },
-                                        redirect: 'manual'
-                                    })
-                                    .then(function(res) {
-                                        var finalLink = res.headers.get('Location') || res.headers.get('HX-Redirect');
-                                        if (!finalLink && res.url && res.url.includes('/dl/')) {
-                                            finalLink = res.url;
-                                        }
-                                        
-                                        if (finalLink) {
-                                            console.log("FDM msParser: Pattern 4 succeeded! Found link: " + finalLink);
-                                            resolve(finalLink); // Resolves the whole extension successfully
-                                        } else {
-                                            reject("All 4 patterns failed to find the direct download link.");
-                                        }
-                                    })
-                                    .catch(function(err) {
-                                        reject("Pattern 4 POST failed: " + err);
-                                    });
-                                    
-                                    // CRITICAL: Stop executing downward so we don't accidentally trigger the "else" reject below while waiting for the network!
-                                    return; 
-                                }
-                            }
-
-                            // Final check if Patterns 1, 2, or 3 found the link instantly
                             if (directLink) {
-                                console.log("FDM msParser: Found direct download link: " + directLink);
+                                console.log("FDM msParser: Found link instantly via Patterns 1-3.");
                                 resolve(directLink);
                             } else {
-                                console.log("FDM msParser: Could not find direct download link in page");
-                                reject("Could not extract direct download link from fuckingfast.co page");
+                                console.log("FDM msParser: Patterns 1-3 found nothing in HTML. Routing to Python...");
+                                executePattern4WithPython();
                             }
                         } catch (e) {
-                            console.log("FDM msParser: Error parsing fuckingfast.co response: " + e);
-                            reject("Error parsing fuckingfast.co response: " + e);
+                            console.log("FDM msParser: Error parsing HTML response: " + e + ". Routing to Python...");
+                            executePattern4WithPython();
                         }
                     })
                     .catch(function (err) {
-                        console.log("FDM msParser: Failed to fetch fuckingfast.co page: " + err);
-                        reject("Failed to fetch fuckingfast.co page: " + err);
+                        console.log("FDM Plugin: HTML fetch failed. Routing to Python...");
+                        executePattern4WithPython();
                     });
             });
         },
