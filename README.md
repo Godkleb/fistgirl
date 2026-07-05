@@ -21,7 +21,7 @@ https://ko-fi.com/sagarchaulagain
 </p>
 
 > ### ⚠️ Important Note Regarding Python Installation Warning
-> Starting with version 1.1.0+, Free Download Manager will display a native security prompt during installation:
+> Starting with version 1.0.1.0+, Free Download Manager will display a native security prompt during installation:
 > **"Warning! Add-on requests dangerous permission: Launch Python code."**
 >
 > **Why is this required?**
